@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InclúyeTE+ · Envío WhatsApp</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --green: #1DB954;
+    --green-dark: #159040;
+    --green-dim: rgba(29,185,84,0.12);
+    --bg: #0a0f0d;
+    --surface: #111a14;
+    --surface2: #162019;
+    --border: rgba(255,255,255,0.07);
+    --text: #e8f0ea;
+    --text-dim: #6b8570;
+    --red: #e05555;
+    --yellow: #f0c040;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 16px 64px;
+  }
+
+  /* Background grid */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(29,185,84,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(29,185,84,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+    width: 100%;
+    max-width: 640px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .logo-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--green-dim);
+    border: 1px solid rgba(29,185,84,0.25);
+    border-radius: 100px;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--green);
+    letter-spacing: 0.5px;
+    margin-bottom: 16px;
+  }
+  .logo-dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+  h1 {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+  h1 span { color: var(--green); }
+  .subtitle { font-size: 14px; color: var(--text-dim); margin-top: 6px; }
+
+  /* Steps */
+  .steps {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 28px;
+    align-items: center;
+  }
+  .step {
+    flex: 1;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    transition: background 0.4s;
+  }
+  .step.active { background: var(--green); }
+  .step.done { background: var(--green-dark); }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .card.visible { display: block; animation: fadeUp 0.35s ease; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title .num {
+    width: 22px; height: 22px;
+    background: var(--green-dim);
+    border: 1px solid rgba(29,185,84,0.3);
+    border-radius: 50%;
+    font-size: 11px;
+    color: var(--green);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* Upload zones */
+  .upload-zone {
+    border: 1.5px dashed var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    margin-bottom: 14px;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--green); background: var(--green-dim); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+  .upload-icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-label { font-size: 14px; font-weight: 500; }
+  .upload-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .upload-zone.filled { border-color: var(--green); background: var(--green-dim); }
+  .upload-zone.filled .upload-label { color: var(--green); }
+
+  /* Textarea */
+  textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 14px;
+    resize: vertical;
+    min-height: 160px;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  textarea:focus { border-color: rgba(29,185,84,0.5); }
+  textarea::placeholder { color: var(--text-dim); }
+  .char-count { font-size: 11px; color: var(--text-dim); text-align: right; margin-top: 6px; font-family: 'DM Mono', monospace; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border: none; border-radius: 10px;
+    padding: 13px 24px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    width: 100%; margin-top: 8px;
+  }
+  .btn-primary { background: var(--green); color: #000; }
+  .btn-primary:hover { background: #22d660; transform: translateY(-1px); }
+  .btn-primary:disabled { background: #2a3d2f; color: var(--text-dim); cursor: not-allowed; transform: none; }
+  .btn-danger { background: rgba(224,85,85,0.15); color: var(--red); border: 1px solid rgba(224,85,85,0.3); }
+  .btn-danger:hover { background: rgba(224,85,85,0.25); }
+
+  /* QR */
+  .qr-wrap {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 20px 0;
+  }
+  .qr-wrap img { border-radius: 12px; border: 3px solid var(--green); width: 220px; height: 220px; }
+  .qr-instructions {
+    margin-top: 16px; text-align: center;
+    font-size: 13px; color: var(--text-dim); line-height: 1.6;
+  }
+  .qr-instructions strong { color: var(--text); }
+  .qr-placeholder {
+    width: 220px; height: 220px;
+    background: var(--surface2);
+    border-radius: 12px;
+    border: 1.5px dashed var(--border);
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px;
+    color: var(--text-dim); font-size: 13px;
+  }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 2.5px solid var(--border);
+    border-top-color: var(--green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Status badge */
+  .wa-status {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 500;
+    padding: 5px 12px; border-radius: 100px;
+    margin-bottom: 20px;
+  }
+  .wa-status.connecting { background: rgba(240,192,64,0.12); color: var(--yellow); border: 1px solid rgba(240,192,64,0.25); }
+  .wa-status.ready { background: var(--green-dim); color: var(--green); border: 1px solid rgba(29,185,84,0.25); }
+  .wa-status .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* Progress */
+  .progress-block { margin-top: 4px; }
+  .progress-header { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); margin-bottom: 8px; font-family: 'DM Mono', monospace; }
+  .progress-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--green); border-radius: 3px; transition: width 0.5s ease; width: 0%; }
+
+  /* Log */
+  .log {
+    margin-top: 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    max-height: 220px;
+    overflow-y: auto;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    line-height: 1.8;
+  }
+  .log-entry { display: flex; gap: 8px; }
+  .log-entry.ok .icon::before { content: '✓'; color: var(--green); }
+  .log-entry.fail .icon::before { content: '✗'; color: var(--red); }
+  .log-entry.warn .icon::before { content: '—'; color: var(--yellow); }
+  .log-entry .num { color: var(--text-dim); }
+  .log-entry .msg { color: var(--text); }
+
+  /* Stats row */
+  .stats { display: flex; gap: 10px; margin-top: 16px; }
+  .stat { flex: 1; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center; }
+  .stat-num { font-size: 22px; font-weight: 600; font-family: 'DM Mono', monospace; }
+  .stat-num.green { color: var(--green); }
+  .stat-num.red { color: var(--red); }
+  .stat-num.yellow { color: var(--yellow); }
+  .stat-lbl { font-size: 10px; color: var(--text-dim); margin-top: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Alert */
+  .alert {
+    background: rgba(224,85,85,0.1);
+    border: 1px solid rgba(224,85,85,0.25);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    color: var(--red);
+    margin-bottom: 14px;
+    display: none;
+  }
+  .alert.visible { display: block; }
+
+  .info-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; color: var(--text-dim);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    margin-bottom: 14px;
+  }
+  .info-row span { color: var(--green); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header">
+    <div class="logo-pill"><div class="logo-dot"></div> InclúyeTE+</div>
+    <h1>Envío masivo<br><span>WhatsApp</span></h1>
+    <p class="subtitle">Sistema Distrital de Cuidado · Centro Llégate</p>
+  </div>
+
+  <div class="steps">
+    <div class="step active" id="step-1"></div>
+    <div class="step" id="step-2"></div>
+    <div class="step" id="step-3"></div>
+  </div>
+
+  <div id="alert" class="alert"></div>
+
+  <!-- PASO 1: Archivos y mensaje -->
+  <div class="card visible" id="card-1">
+    <div class="card-title"><div class="num">1</div> Carga los archivos y el mensaje</div>
+
+    <div class="info-row">
+      📊 El Excel debe tener: <span>columna A = tel. 1</span>, <span>columna B = tel. 2</span> (opcional). Sin encabezados.
+    </div>
+
+    <div class="upload-zone" id="zone-excel">
+      <input type="file" id="input-excel" accept=".xlsx,.xls,.csv">
+      <div class="upload-icon">📊</div>
+      <div class="upload-label">Subir Excel de contactos</div>
+      <div class="upload-sub">.xlsx · .xls · .csv</div>
+    </div>
+
+    <div class="upload-zone" id="zone-imagen">
+      <input type="file" id="input-imagen" accept="image/*">
+      <div class="upload-icon">🖼️</div>
+      <div class="upload-label">Subir imagen (opcional)</div>
+      <div class="upload-sub">JPG · PNG · WEBP</div>
+    </div>
+
+    <textarea id="mensaje" placeholder="Escribe el mensaje aquí...&#10;&#10;Ejemplo:&#10;Hola, te invitamos a la jornada del Sisbén el miércoles 27 de mayo..."></textarea>
+    <div class="char-count"><span id="char-n">0</span> caracteres</div>
+
+    <button class="btn btn-primary" id="btn-continuar" disabled>Continuar →</button>
+  </div>
+
+  <!-- PASO 2: Vincular WhatsApp -->
+  <div class="card" id="card-2">
+    <div class="card-title"><div class="num">2</div> Vincula tu WhatsApp</div>
+
+    <div id="wa-status" class="wa-status connecting">
+      <div class="dot"></div> Iniciando conexión...
+    </div>
+
+    <div class="qr-wrap">
+      <div class="qr-placeholder" id="qr-placeholder">
+        <div class="spinner"></div>
+        <span>Generando QR...</span>
+      </div>
+      <img id="qr-img" style="display:none" alt="QR WhatsApp">
+      <div class="qr-instructions">
+        1. Abre <strong>WhatsApp Business</strong> en tu celular<br>
+        2. Ve a <strong>Dispositivos vinculados</strong><br>
+        3. Toca <strong>Vincular dispositivo</strong> y escanea
+      </div>
+    </div>
+  </div>
+
+  <!-- PASO 3: Envío -->
+  <div class="card" id="card-3">
+    <div class="card-title"><div class="num">3</div> Enviando mensajes</div>
+
+    <div class="info-row">
+      ⏱ Intervalo: <span>60 seg</span> entre mensajes · Máximo: <span>50 mensajes</span> por sesión
+    </div>
+
+    <div class="progress-block">
+      <div class="progress-header">
+        <span>Progreso</span>
+        <span id="prog-label">0 / 0</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" id="prog-fill"></div></div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="stat-num green" id="s-enviados">0</div><div class="stat-lbl">Enviados</div></div>
+      <div class="stat"><div class="stat-num yellow" id="s-no-wa">0</div><div class="stat-lbl">Sin WA</div></div>
+      <div class="stat"><div class="stat-num red" id="s-errores">0</div><div class="stat-lbl">Errores</div></div>
+    </div>
+
+    <div class="log" id="log"></div>
+
+    <button class="btn btn-danger" id="btn-detener" style="margin-top:16px">⏹ Detener envío</button>
+  </div>
+
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const socket = io();
+
+let excelPath = null, imagePath = null;
+let total = 0, enviados = 0, sinWA = 0, errores = 0;
+
+// ─── Upload helpers ────────────────────────────────────────────────────────
+async function uploadFiles() {
+  const excelFile = document.getElementById('input-excel').files[0];
+  const imagenFile = document.getElementById('input-imagen').files[0];
+  const fd = new FormData();
+  if (excelFile) fd.append('excel', excelFile);
+  if (imagenFile) fd.append('imagen', imagenFile);
+  const res = await fetch('/upload', { method: 'POST', body: fd });
+  return res.json();
+}
+
+// ─── File inputs ───────────────────────────────────────────────────────────
+document.getElementById('input-excel').addEventListener('change', function() {
+  const zone = document.getElementById('zone-excel');
+  if (this.files[0]) {
+    zone.classList.add('filled');
+    zone.querySelector('.upload-label').textContent = this.files[0].name;
+  }
+  checkReady();
+});
+
+document.getElementById('input-imagen').addEventListener('change', function() {
+  const zone = document.getElementById('zone-imagen');
+  if (this.files[0]) {
+    zone.classList.add('filled');
+    zone.querySelector('.upload-label').textContent = this.files[0].name;
+  }
+});
+
+document.getElementById('mensaje').addEventListener('input', function() {
+  document.getElementById('char-n').textContent = this.value.length;
+  checkReady();
+});
+
+function checkReady() {
+  const hasExcel = document.getElementById('input-excel').files.length > 0;
+  const hasMsg   = document.getElementById('mensaje').value.trim().length > 0;
+  document.getElementById('btn-continuar').disabled = !(hasExcel && hasMsg);
+}
+
+// ─── Step 1 → 2 ───────────────────────────────────────────────────────────
+document.getElementById('btn-continuar').addEventListener('click', async () => {
+  document.getElementById('btn-continuar').disabled = true;
+  document.getElementById('btn-continuar').textContent = 'Subiendo archivos...';
+
+  try {
+    const paths = await uploadFiles();
+    excelPath = paths.excelPath || null;
+    imagePath = paths.imagePath || null;
+  } catch (e) {
+    showAlert('Error al subir los archivos. Intenta de nuevo.');
+    document.getElementById('btn-continuar').disabled = false;
+    document.getElementById('btn-continuar').textContent = 'Continuar →';
+    return;
+  }
+
+  setStep(2);
+  socket.emit('init-whatsapp', { sessionId: socket.id });
+});
+
+// ─── Socket events ─────────────────────────────────────────────────────────
+socket.on('qr', ({ qrImage }) => {
+  document.getElementById('qr-placeholder').style.display = 'none';
+  const img = document.getElementById('qr-img');
+  img.src = qrImage;
+  img.style.display = 'block';
+  setWAStatus('connecting', 'Escanea el QR con WhatsApp Business');
+});
+
+socket.on('whatsapp-ready', () => {
+  setWAStatus('ready', 'WhatsApp conectado');
+  setTimeout(() => {
+    setStep(3);
+    const mensaje = document.getElementById('mensaje').value.trim();
+    socket.emit('start-sending', { excelPath, imagePath, mensaje });
+  }, 1000);
+});
+
+socket.on('sending-started', ({ total: t }) => {
+  total = t;
+  enviados = 0; sinWA = 0; errores = 0;
+  updateStats();
+  updateProgress(0, t);
+});
+
+socket.on('msg-status', ({ i, total: t, numero, status, razon }) => {
+  updateProgress(i, t);
+  if (status === 'enviado') {
+    enviados++;
+    addLog('ok', numero, 'Enviado');
+  } else if (status === 'no_registrado') {
+    sinWA++;
+    addLog('warn', numero, 'Sin WhatsApp');
+  } else {
+    errores++;
+    addLog('fail', numero, razon || 'Error');
+  }
+  updateStats();
+});
+
+socket.on('sending-done', ({ enviados: e, total: t }) => {
+  addLog('ok', '', `✓ Completado — ${e} de ${t} mensajes enviados`);
+  document.getElementById('btn-detener').textContent = '✓ Envío completado';
+  document.getElementById('btn-detener').disabled = true;
+});
+
+socket.on('sending-stopped', () => {
+  addLog('warn', '', 'Envío detenido por el usuario');
+  document.getElementById('btn-detener').textContent = 'Envío detenido';
+  document.getElementById('btn-detener').disabled = true;
+});
+
+socket.on('whatsapp-disconnected', () => {
+  setWAStatus('connecting', 'WhatsApp desconectado');
+  showAlert('WhatsApp se desconectó. Recarga la página para intentar de nuevo.');
+});
+
+socket.on('error', ({ msg }) => {
+  showAlert(msg);
+});
+
+document.getElementById('btn-detener').addEventListener('click', () => {
+  socket.emit('stop-sending');
+});
+
+// ─── UI helpers ────────────────────────────────────────────────────────────
+function setStep(n) {
+  [1,2,3].forEach(i => {
+    document.getElementById(`card-${i}`).classList.toggle('visible', i === n);
+    const s = document.getElementById(`step-${i}`);
+    s.classList.toggle('active', i === n);
+    s.classList.toggle('done', i < n);
+  });
+  hideAlert();
+}
+
+function setWAStatus(type, text) {
+  const el = document.getElementById('wa-status');
+  el.className = `wa-status ${type}`;
+  el.innerHTML = `<div class="dot"></div> ${text}`;
+}
+
+function updateProgress(done, t) {
+  const pct = t ? Math.round(done / t * 100) : 0;
+  document.getElementById('prog-fill').style.width = pct + '%';
+  document.getElementById('prog-label').textContent = `${done} / ${t}`;
+}
+
+function updateStats() {
+  document.getElementById('s-enviados').textContent = enviados;
+  document.getElementById('s-no-wa').textContent    = sinWA;
+  document.getElementById('s-errores').textContent  = errores;
+}
+
+function addLog(type, numero, msg) {
+  const log = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.className = `log-entry ${type}`;
+  entry.innerHTML = `<span class="icon"></span><span class="num">${numero}</span><span class="msg">${msg}</span>`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+function showAlert(msg) {
+  const el = document.getElementById('alert');
+  el.textContent = msg;
+  el.classList.add('visible');
+}
+
+function hideAlert() {
+  document.getElementById('alert').classList.remove('visible');
+}
+</script>
+</body>
+</html>
