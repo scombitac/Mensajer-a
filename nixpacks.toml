@@ -1,5 +1,6 @@
 [phases.setup]
 nixPkgs = [
+  "nodejs_18",
   "chromium",
   "nss",
   "freetype",
