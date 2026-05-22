@@ -8,6 +8,8 @@ nixPkgs = [
   "dejavu_fonts"
 ]
 
+[phases.build]
+cmds = ["npm install", "which chromium || which chromium-browser || echo 'chromium not found'"]
+
 [variables]
 PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
-PUPPETEER_EXECUTABLE_PATH = "/run/current-system/sw/bin/chromium"
