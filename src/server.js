@@ -47,7 +47,7 @@ function parseExcel(filePath) {
 }
 
 function buildClient(socketId) {
-  // Use puppeteer's own bundled Chromium — most compatible option
+  // Use puppeteer's own bundled Chromium — most compatible option new
   return new Client({
     authStrategy: new LocalAuth({ clientId: `session-${socketId}` }),
     puppeteer: {
