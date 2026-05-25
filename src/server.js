@@ -17,10 +17,10 @@ const PORT = process.env.PORT || 3000;
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_MENSAJES = 50;
 const INTERVALO_MS = 60 * 1000;
+const PRE_SEND_DELAY = 3000; // 3s antes de cada operación WA para estabilizar el frame
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
-// Detect Chromium path dynamically
 function findChromium() {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
   const candidates = [
@@ -43,7 +43,6 @@ function findChromium() {
 const CHROMIUM_PATH = findChromium();
 console.log('Chromium path:', CHROMIUM_PATH || 'NOT FOUND — will use bundled');
 
-// ─── Multer ───────────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
   filename: (req, file, cb) => {
@@ -53,12 +52,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
 
-// ─── Sesiones activas por socket ──────────────────────────────────────────────
 const sessions = {};
 
 app.use(express.static(path.join(__dirname, '../public')));
 
-// ─── Parsear Excel ────────────────────────────────────────────────────────────
 function parseExcel(filePath) {
   const wb = XLSX.readFile(filePath);
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -73,10 +70,37 @@ function parseExcel(filePath) {
   return contacts;
 }
 
-// ─── Socket.io ────────────────────────────────────────────────────────────────
+function buildClient(socketId) {
+  const puppeteerConfig = {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote',
+      '--single-process',
+      '--disable-extensions',
+      '--disable-background-networking',
+      '--disable-default-apps',
+      '--window-size=1280,720',
+    ]
+  };
+  if (CHROMIUM_PATH) puppeteerConfig.executablePath = CHROMIUM_PATH;
+
+  return new Client({
+    authStrategy: new LocalAuth({ clientId: `session-${socketId}` }),
+    puppeteer: puppeteerConfig,
+    restartOnAuthFail: true,
+    takeoverOnConflict: true,
+    takeoverTimeoutMs: 10000,
+  });
+}
+
 io.on('connection', (socket) => {
   console.log(`Cliente conectado: ${socket.id}`);
-  sessions[socket.id] = { client: null, sending: false, count: 0 };
+  sessions[socket.id] = { client: null, sending: false, count: 0, ready: false };
 
   socket.on('disconnect', () => {
     const s = sessions[socket.id];
@@ -86,48 +110,46 @@ io.on('connection', (socket) => {
 
   socket.on('init-whatsapp', async () => {
     const s = sessions[socket.id];
-    if (s.client) { try { s.client.destroy(); } catch (_) {} }
+    if (s.client) { try { await s.client.destroy(); } catch (_) {} s.client = null; s.ready = false; }
 
-    const puppeteerConfig = {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process'
-      ]
-    };
-    if (CHROMIUM_PATH) puppeteerConfig.executablePath = CHROMIUM_PATH;
-
-    const client = new Client({
-      authStrategy: new LocalAuth({ clientId: `session-${socket.id}` }),
-      puppeteer: puppeteerConfig
-    });
-
+    const client = buildClient(socket.id);
     s.client = client;
 
     client.on('qr', async (qr) => {
-      const qrImage = await QRCode.toDataURL(qr);
-      socket.emit('qr', { qrImage });
+      try {
+        const qrImage = await QRCode.toDataURL(qr);
+        socket.emit('qr', { qrImage });
+      } catch (e) { console.error('QR error:', e.message); }
     });
 
-    client.on('ready', () => socket.emit('whatsapp-ready'));
-    client.on('auth_failure', () => socket.emit('error', { msg: 'Error de autenticación. Recarga la página.' }));
-    client.on('disconnected', () => socket.emit('whatsapp-disconnected'));
+    client.on('ready', () => {
+      console.log(`WhatsApp listo: ${socket.id}`);
+      s.ready = true;
+      socket.emit('whatsapp-ready');
+    });
+
+    client.on('auth_failure', () => {
+      s.ready = false;
+      socket.emit('error', { msg: 'Error de autenticación. Recarga la página.' });
+    });
+
+    client.on('disconnected', (reason) => {
+      console.log(`Desconectado (${socket.id}):`, reason);
+      s.ready = false;
+      socket.emit('whatsapp-disconnected');
+    });
 
     try {
       await client.initialize();
     } catch (err) {
+      console.error('Initialize error:', err.message);
       socket.emit('error', { msg: 'Error al iniciar WhatsApp: ' + err.message });
     }
   });
 
   socket.on('start-sending', async ({ excelPath, imagePath, mensaje }) => {
     const s = sessions[socket.id];
-    if (!s.client) return socket.emit('error', { msg: 'WhatsApp no está conectado.' });
+    if (!s || !s.client || !s.ready) return socket.emit('error', { msg: 'WhatsApp no está conectado.' });
     if (s.sending) return socket.emit('error', { msg: 'Ya hay un envío en curso.' });
 
     let contacts;
@@ -137,7 +159,10 @@ io.on('connection', (socket) => {
     if (!contacts.length) return socket.emit('error', { msg: 'No se encontraron números válidos en el Excel.' });
 
     let media = null;
-    if (imagePath && fs.existsSync(imagePath)) media = MessageMedia.fromFilePath(imagePath);
+    if (imagePath && fs.existsSync(imagePath)) {
+      try { media = MessageMedia.fromFilePath(imagePath); }
+      catch (e) { console.error('Media error:', e.message); }
+    }
 
     const limited = contacts.slice(0, MAX_MENSAJES);
     s.sending = true;
@@ -151,19 +176,31 @@ io.on('connection', (socket) => {
       for (const num of contacto.nums) {
         if (!s.sending) break;
         const chatId = `57${num}@c.us`;
+
+        // Small delay before each WA operation to let Puppeteer stabilize
+        await sleep(PRE_SEND_DELAY);
+
         try {
           const registrado = await s.client.isRegisteredUser(chatId);
           if (!registrado) {
             socket.emit('msg-status', { i: i + 1, total: limited.length, numero: num, status: 'no_registrado' });
           } else {
+            await sleep(1000); // extra pause before sending
             if (media) await s.client.sendMessage(chatId, media, { caption: mensaje });
             else await s.client.sendMessage(chatId, mensaje);
             s.count++;
             socket.emit('msg-status', { i: i + 1, total: limited.length, numero: num, status: 'enviado' });
           }
         } catch (err) {
-          socket.emit('msg-status', { i: i + 1, total: limited.length, numero: num, status: 'error', razon: err.message });
+          const msg = err.message || '';
+          const isFrameError = msg.includes('detached') || msg.includes('Execution context') || msg.includes('Target closed') || msg.includes('Frame');
+          console.warn(`Error en ${num}:`, msg);
+          socket.emit('msg-status', {
+            i: i + 1, total: limited.length, numero: num, status: 'error',
+            razon: isFrameError ? 'Error transitorio de conexión' : msg
+          });
         }
+
         if (i < limited.length - 1) await sleep(INTERVALO_MS);
       }
     }
@@ -187,6 +224,15 @@ app.post('/upload', upload.fields([
   if (req.files.excel) result.excelPath = req.files.excel[0].path;
   if (req.files.imagen) result.imagePath = req.files.imagen[0].path;
   res.json(result);
+});
+
+process.on('unhandledRejection', (reason) => {
+  const msg = reason && reason.message ? reason.message : String(reason);
+  if (msg.includes('detached') || msg.includes('Execution context') || msg.includes('Target closed') || msg.includes('Frame')) {
+    console.warn('Puppeteer frame error capturado globalmente:', msg);
+  } else {
+    console.error('Unhandled rejection:', msg);
+  }
 });
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
