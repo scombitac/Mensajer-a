@@ -4,7 +4,6 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
 const XLSX = require('xlsx');
 const QRCode = require('qrcode');
 const { Client, LocalAuth, MessageMedia } = require('whatsapp-web.js');
@@ -17,31 +16,8 @@ const PORT = process.env.PORT || 3000;
 const UPLOAD_DIR = path.join(__dirname, '../uploads');
 const MAX_MENSAJES = 50;
 const INTERVALO_MS = 60 * 1000;
-const PRE_SEND_DELAY = 3000; // 3s antes de cada operación WA para estabilizar el frame
 
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-
-function findChromium() {
-  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
-  const candidates = [
-    '/usr/bin/chromium',
-    '/usr/bin/chromium-browser',
-    '/usr/bin/google-chrome',
-    '/usr/bin/google-chrome-stable',
-    '/nix/var/nix/profiles/default/bin/chromium',
-  ];
-  for (const p of candidates) {
-    if (fs.existsSync(p)) return p;
-  }
-  try {
-    const result = execSync('which chromium || which chromium-browser || which google-chrome', { encoding: 'utf8' }).trim().split('\n')[0];
-    if (result) return result;
-  } catch (_) {}
-  return null;
-}
-
-const CHROMIUM_PATH = findChromium();
-console.log('Chromium path:', CHROMIUM_PATH || 'NOT FOUND — will use bundled');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, UPLOAD_DIR),
@@ -71,27 +47,23 @@ function parseExcel(filePath) {
 }
 
 function buildClient(socketId) {
-  const puppeteerConfig = {
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--no-first-run',
-      '--no-zygote',
-      '--single-process',
-      '--disable-extensions',
-      '--disable-background-networking',
-      '--disable-default-apps',
-      '--window-size=1280,720',
-    ]
-  };
-  if (CHROMIUM_PATH) puppeteerConfig.executablePath = CHROMIUM_PATH;
-
+  // Use puppeteer's own bundled Chromium — most compatible option
   return new Client({
     authStrategy: new LocalAuth({ clientId: `session-${socketId}` }),
-    puppeteer: puppeteerConfig,
+    puppeteer: {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-extensions',
+        '--disable-background-networking',
+        '--disable-default-apps',
+      ]
+    },
     restartOnAuthFail: true,
     takeoverOnConflict: true,
     takeoverTimeoutMs: 10000,
@@ -177,15 +149,11 @@ io.on('connection', (socket) => {
         if (!s.sending) break;
         const chatId = `57${num}@c.us`;
 
-        // Small delay before each WA operation to let Puppeteer stabilize
-        await sleep(PRE_SEND_DELAY);
-
         try {
           const registrado = await s.client.isRegisteredUser(chatId);
           if (!registrado) {
             socket.emit('msg-status', { i: i + 1, total: limited.length, numero: num, status: 'no_registrado' });
           } else {
-            await sleep(1000); // extra pause before sending
             if (media) await s.client.sendMessage(chatId, media, { caption: mensaje });
             else await s.client.sendMessage(chatId, mensaje);
             s.count++;
@@ -228,8 +196,8 @@ app.post('/upload', upload.fields([
 
 process.on('unhandledRejection', (reason) => {
   const msg = reason && reason.message ? reason.message : String(reason);
-  if (msg.includes('detached') || msg.includes('Execution context') || msg.includes('Target closed') || msg.includes('Frame')) {
-    console.warn('Puppeteer frame error capturado globalmente:', msg);
+  if (msg.includes('detached') || msg.includes('Execution context') || msg.includes('Target closed') || msg.includes('Frame') || msg.includes('null')) {
+    console.warn('Error de Puppeteer capturado:', msg);
   } else {
     console.error('Unhandled rejection:', msg);
   }

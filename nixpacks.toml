@@ -1,15 +1,32 @@
 [phases.setup]
 nixPkgs = [
   "nodejs_20",
-  "chromium",
   "nss",
   "freetype",
   "harfbuzz",
-  "dejavu_fonts"
+  "dejavu_fonts",
+  "glib",
+  "libGL",
+  "xorg.libX11",
+  "xorg.libXcomposite",
+  "xorg.libXdamage",
+  "xorg.libXext",
+  "xorg.libXfixes",
+  "xorg.libXrandr",
+  "xorg.libxcb",
+  "xorg.libXcursor",
+  "xorg.libXi",
+  "cups",
+  "dbus",
+  "atk",
+  "at-spi2-atk",
+  "pango",
+  "cairo",
+  "libdrm",
+  "mesa",
+  "expat",
+  "nspr"
 ]
 
-[phases.build]
-cmds = ["npm install", "which chromium || which chromium-browser || echo 'chromium not found'"]
-
 [variables]
-PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "true"
+PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = "false"
